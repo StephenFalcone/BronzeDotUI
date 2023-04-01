@@ -8,7 +8,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#define PINK_TRIAD 0xd4,0x98,0xab
+#define PINK_TRIAD 0xd2,0xb4,0x6c
 #define kTextBoxMaxRows 8
 #define kTextLineLength 256
 #define kLineHeight 48
