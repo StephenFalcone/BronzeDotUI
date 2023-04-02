@@ -222,7 +222,7 @@ static void getUniqueName(Entry* entry, char* out_name) {
 }
 
 static void Directory_index(Directory* self) {
-	int skip_index = exactMatch(Paths.fauxRecentDir, self->path) || prefixMatch(Paths.collectionsDir, self->path); // not alphabetized
+	int skip_index = exactMatch(Paths.fauxFavDir, self->path) || exactMatch(Paths.fauxRecentDir, self->path) || prefixMatch(Paths.collectionsDir, self->path); // not alphabetized
 	
 	Entry* prior = NULL;
 	int alpha = -1;
@@ -266,6 +266,7 @@ static void Directory_index(Directory* self) {
 
 static Array* getRoot(void);
 static Array* getRecents(void);
+static Array* getFavorites(void);
 static Array* getCollection(char* path);
 static Array* getDiscs(char* path);
 static Array* getEntries(char* path);
@@ -282,6 +283,9 @@ static Directory* Directory_new(char* path, int selected) {
 	}
 	else if (exactMatch(path, Paths.fauxRecentDir)) {
 		self->entries = getRecents();
+	}
+	else if (exactMatch(path, Paths.fauxFavDir)){
+		self->entries = getFavorites();
 	}
 	else if (!exactMatch(path, Paths.collectionsDir) && prefixMatch(Paths.collectionsDir, path)) {
 		self->entries = getCollection(path);
@@ -321,9 +325,26 @@ typedef struct Recent {
 	char* path; // NOTE: this is without the Paths.rootDir prefix!
 	int available;
 } Recent;
+typedef struct Favorite {
+	char* path; // NOTE: this is without the Paths.rootDir prefix!
+	int available;
+} Favorite;
 static int hasEmu(char* emu_name);
 static Recent* Recent_new(char* path) {
 	Recent* self = malloc(sizeof(Recent));
+
+	char sd_path[256]; // only need to get emu name
+	sprintf(sd_path, "%s%s", Paths.rootDir, path);
+
+	char emu_name[256];
+	getEmuName(sd_path, emu_name);
+	
+	self->path = strdup(path);
+	self->available = hasEmu(emu_name);
+	return self;
+}
+static Favorite* Favorite_new(char* path) {
+	Favorite* self = malloc(sizeof(Favorite));
 
 	char sd_path[256]; // only need to get emu name
 	sprintf(sd_path, "%s%s", Paths.rootDir, path);
@@ -339,10 +360,20 @@ static void Recent_free(Recent* self) {
 	free(self->path);
 	free(self);
 }
-
+static void Favorite_free(Favorite* self) {
+	free(self->path);
+	free(self);
+}
 static int RecentArray_indexOf(Array* self, char* str) {
 	for (int i=0; i<self->count; i++) {
 		Recent* item = self->items[i];
+		if (exactMatch(item->path, str)) return i;
+	}
+	return -1;
+}
+static int FavoriteArray_indexOf(Array* self, char* str) {
+	for (int i=0; i<self->count; i++) {
+		Favorite* item = self->items[i];
 		if (exactMatch(item->path, str)) return i;
 	}
 	return -1;
@@ -353,13 +384,22 @@ static void RecentArray_free(Array* self) {
 	}
 	Array_free(self);
 }
+static void FavoriteArray_free(Array* self) {
+	for (int i=0; i<self->count; i++) {
+		Favorite_free(self->items[i]);
+	}
+	Array_free(self);
+}
 
 ///////////////////////////////////////
 
 static Directory* top;
 static Array* stack; // DirectoryArray
 static Array* recents; // RecentArray
+static Array* favorites; //FavoriteArray
 
+static int can_fav = 0;
+static int can_unfav = 0;
 static int is_simple = 0;
 static int quit = 0;
 static int can_resume = 0;
@@ -374,7 +414,7 @@ static int restore_end = 0;
 
 ///////////////////////////////////////
 
-#define kMaxRecents 24 // a multiple of all menu rows
+#define kMaxRecents 10 // a multiple of all menu rows
 static void saveRecents(void) {
 	FILE* file = fopen(Paths.recentPath, "w");
 	if (file) {
@@ -403,6 +443,39 @@ static void addRecent(char* path) {
 		}
 	}
 	saveRecents();
+}
+
+#define kMaxFavorites 5 // a multiple of all menu rows
+static void saveFavorites(void) {
+	FILE* file = fopen(Paths.favPath, "w");
+	if (file) {
+		for (int i=0; i<favorites->count; i++) {
+			Favorite* favorite = favorites->items[i];
+			fputs(favorite->path, file);
+			putc('\n', file);
+		}
+		fclose(file);
+	}
+}
+
+static void editFavorite(char* path) {
+	path += strlen(Paths.rootDir); // makes paths platform agnostic
+	int id = FavoriteArray_indexOf(favorites, path);
+	if (id==-1) { // add
+		while (favorites->count>=kMaxFavorites) {
+			Favorite_free(Array_pop(favorites));
+		}
+		Array_unshift(favorites, Favorite_new(path));
+	}
+	else if (id>=0) { // bump to bottom and pop
+		for (int i=id; i<favorites->count-1; i++) {
+			void* tmp = favorites->items[i+1];
+			favorites->items[i+1] = favorites->items[i];
+			favorites->items[i] = tmp;
+		}
+		Favorite_free(Array_pop(favorites));
+	}
+	saveFavorites();
 }
 
 static int hasEmu(char* emu_name) {
@@ -580,6 +653,76 @@ static int hasRecents(void) {
 	StringArray_free(parent_paths);
 	return has>0;
 }
+
+static int hasFavorites(void) {
+	int has = 0;
+	
+	Array* parent_paths = Array_new();
+	if (exists(kChangeDiscPath)) {
+		char sd_path[256];
+		getFile(kChangeDiscPath, sd_path, 256);
+		if (exists(sd_path)) {
+			char* disc_path = sd_path + strlen(Paths.rootDir); // makes path platform agnostic
+			Favorite* favorite = Favorite_new(disc_path);
+			if (favorite->available) has += 1;
+			Array_push(favorites, favorite);
+		
+			char parent_path[256];
+			strcpy(parent_path, disc_path);
+			char* tmp = strrchr(parent_path, '/') + 1;
+			tmp[0] = '\0';
+			Array_push(parent_paths, strdup(parent_path));
+		}
+		unlink(kChangeDiscPath);
+	}
+	
+	FILE* file = fopen(Paths.favPath, "r"); // newest at top
+	if (file) {
+		char line[256];
+		while (fgets(line,256,file)!=NULL) {
+			normalizeNewline(line);
+			trimTrailingNewlines(line);
+			if (strlen(line)==0) continue; // skip empty lines
+			
+			char sd_path[256];
+			sprintf(sd_path, "%s%s", Paths.rootDir, line);
+			if (exists(sd_path)) {
+				if (favorites->count<kMaxFavorites) {
+					// this logic replaces an existing disc from a multi-disc game with the last used
+					char m3u_path[256];
+					if (hasM3u(sd_path, m3u_path)) { // TODO: this might tank launch speed
+						char parent_path[256];
+						strcpy(parent_path, line);
+						char* tmp = strrchr(parent_path, '/') + 1;
+						tmp[0] = '\0';
+						
+						int found = 0;
+						for (int i=0; i<parent_paths->count; i++) {
+							char* path = parent_paths->items[i];
+							if (prefixMatch(path, parent_path)) {
+								found = 1;
+								break;
+							}
+						}
+						if (found) continue;
+						
+						Array_push(parent_paths, strdup(parent_path));
+					}
+					Favorite* favorite = Favorite_new(line);
+					if (favorite->available) has += 1;
+					Array_push(favorites, favorite);
+				}
+			}
+		}
+		fclose(file);
+	}
+	
+	saveFavorites();
+	
+	StringArray_free(parent_paths);
+	return has>0;
+}
+
 static int hasCollections(void) {
 	int has = 0;
 	if (!exists(Paths.collectionsDir)) return has;
@@ -621,6 +764,8 @@ static int hasRoms(char* dir_name) {
 }
 static Array* getRoot(void) {
 	Array* root = Array_new();
+	
+	if (hasFavorites()) Array_push(root, Entry_new(Paths.fauxFavDir, kEntryDir));
 	
 	if (hasRecents()) Array_push(root, Entry_new(Paths.fauxRecentDir, kEntryDir));
 	
@@ -705,6 +850,19 @@ static Array* getRecents(void) {
 		
 		char sd_path[256];
 		sprintf(sd_path, "%s%s", Paths.rootDir, recent->path);
+		int type = suffixMatch(".pak", sd_path) ? kEntryPak : kEntryRom; // ???
+		Array_push(entries, Entry_new(sd_path, type));
+	}
+	return entries;
+}
+static Array* getFavorites(void) {
+	Array* entries = Array_new();
+	for (int i=0; i<favorites->count; i++) {
+		Favorite* favorite = favorites->items[i];
+		if (!favorite->available) continue;
+		
+		char sd_path[256];
+		sprintf(sd_path, "%s%s", Paths.rootDir, favorite->path);
 		int type = suffixMatch(".pak", sd_path) ? kEntryPak : kEntryRom; // ???
 		Array_push(entries, Entry_new(sd_path, type));
 	}
@@ -962,6 +1120,49 @@ static void readyResume(Entry* entry) {
 	readyResumePath(entry->path, entry->type);
 }
 
+static void readyFavoritePath(char* rom_path, int type) {
+	char* tmp;
+	can_fav = 0;
+	can_unfav = 0;
+	char path[256];
+	strcpy(path, rom_path);
+	
+	if (!prefixMatch(Paths.romsDir, path)) return;
+	
+	char auto_path[256];
+	if (type==kEntryDir) {
+		if (!hasCue(path, auto_path)) { // no cue?
+			tmp = strrchr(auto_path, '.') + 1; // extension
+			strcpy(tmp, "m3u"); // replace with m3u
+			if (!exists(auto_path)) return; // no m3u
+		}
+		strcpy(path, auto_path); // cue or m3u if one exists
+	}
+	
+	if (!suffixMatch(".m3u", path)) {
+		char m3u_path[256];
+		if (hasM3u(path, m3u_path)) {
+			// change path to m3u path
+			strcpy(path, m3u_path);
+		}
+	}
+	//get rid of /mnt/SDCARD, is okay because of prefix match up top
+	memmove(path, path+11, strlen(path) - 10);
+	
+	int id = FavoriteArray_indexOf(favorites, path);
+	if (id==-1) {
+		can_fav = 1;
+		can_unfav = 0;
+	}
+	else if (id>=0) {
+		can_fav = 0;
+		can_unfav = 1;
+	}
+}
+static void readyFavorite(Entry* entry) {
+	readyFavoritePath(entry->path, entry->type);
+}
+
 static void saveLast(char* path);
 static void loadLast(void);
 
@@ -1118,7 +1319,7 @@ static void closeDirectory(void) {
 static void Entry_open(Entry* self) {
 	if (self->type==kEntryRom) {
 		char *last = NULL;
-		if (prefixMatch(Paths.collectionsDir, top->path)) {
+		if (prefixMatch(Paths.collectionsDir, top->path) || exactMatch(Paths.fauxFavDir, top->path)) {
 			char* tmp;
 			char filename[256];
 			
@@ -1198,7 +1399,7 @@ static void loadLast(void) { // call after loading root directory
 							top->start = top->end - Screen.main.list.row_count;
 						}
 					}
-					if (last->count==0 && !exactMatch(entry->path, Paths.fauxRecentDir) && !(!exactMatch(entry->path, Paths.collectionsDir) && prefixMatch(Paths.collectionsDir, entry->path))) break; // don't show contents of auto-launch dirs
+					if (last->count==0 && !exactMatch(entry->path, Paths.fauxRecentDir) && !exactMatch(entry->path, Paths.fauxFavDir) && !(!exactMatch(entry->path, Paths.collectionsDir) && prefixMatch(Paths.collectionsDir, entry->path))) break; // don't show contents of auto-launch dirs
 				
 					if (entry->type==kEntryDir) {
 						openDirectory(entry->path, 0);
@@ -1218,11 +1419,13 @@ static void loadLast(void) { // call after loading root directory
 static void Menu_init(void) {
 	stack = Array_new(); // array of open Directories
 	recents = Array_new();
+	favorites = Array_new();
 
 	openDirectory(Paths.rootDir, 0);
 	loadLast(); // restore state when available
 }
 static void Menu_quit(void) {
+	FavoriteArray_free(favorites);
 	RecentArray_free(recents);
 	DirectoryArray_free(stack);
 }
@@ -1378,8 +1581,52 @@ int main (int argc, char *argv[]) {
 				dirty = 1;
 			}
 		
-			if (dirty && total>0) readyResume(top->entries->items[top->selected]);
+			if (dirty && total>0){
+				readyResume(top->entries->items[top->selected]);
+				readyFavorite(top->entries->items[top->selected]);
+			}
+			
+			if (total>0 && Input_justReleased(kButtonAltEmu)){
+				Entry* self = top->entries->items[top->selected];
+				int preselected = top->selected;
+				editFavorite(self->path);
+				dirty = 1;
+				if (prefixMatch(Paths.fauxFavDir,top->path)){
 
+					int selected = 0;
+					int start = selected;
+					int end = 0;
+					if (top && top->entries->count>0) {
+						if (restore_depth==stack->count && top->selected==restore_relative) {
+							selected = restore_selected;
+							start = restore_start;
+							end = restore_end;
+						}
+					}
+					
+					top = Directory_new(Paths.fauxFavDir, selected);
+					top->start = start;
+					top->end = end ? end : ((top->entries->count<Screen.main.list.row_count) ? top->entries->count : Screen.main.list.row_count);
+					
+					total = top->entries->count;
+					
+					if (total>0) {
+						if (preselected<top->entries->count){
+							top->selected = preselected;
+						}
+						else{
+							top->selected = preselected-1;
+						}
+					}
+					else{
+						GFX_blitBodyCopy(screen, "Empty folder", 0,0,Screen.width,Screen.height);
+					}
+					
+					SDL_Flip(screen);
+				}
+				readyFavorite(top->entries->items[top->selected]);
+			}
+			
 			if (total>0 && Input_justReleased(kButtonResume)) {
 				if (can_resume) {
 					should_resume = 1;
@@ -1392,14 +1639,20 @@ int main (int argc, char *argv[]) {
 				total = top->entries->count;
 				dirty = 1;
 	
-				if (total>0) readyResume(top->entries->items[top->selected]);
+				if (total>0) {
+					readyResume(top->entries->items[top->selected]);
+					readyFavorite(top->entries->items[top->selected]);
+				}
 			}
 			else if (Input_justPressed(kButtonB) && stack->count>1) {
 				closeDirectory();
 				total = top->entries->count;
 				dirty = 1;
 				// can_resume = 0;
-				if (total>0) readyResume(top->entries->items[top->selected]);
+				if (total>0) {
+					readyResume(top->entries->items[top->selected]);
+					readyFavorite(top->entries->items[top->selected]);
+				}
 			}
 		}
 		
@@ -1524,13 +1777,30 @@ int main (int argc, char *argv[]) {
 			}
 		
 			GFX_blitRule(screen, Screen.main.rule.bottom_y);
+			int xbutton_width = 0;
 			if (can_resume && !show_version) {
 				if (strlen(HINT_RESUME)>1) GFX_blitPill(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top);
 				else GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
+				
+				xbutton_width = GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
+				if(can_fav){
+					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
+				}
+				else if (can_unfav){
+					GFX_blitButton(screen, HINT_FAV, "UNFAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
+				}
 			}
 			else {
 				GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
+				xbutton_width = GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
+				if(can_fav){
+					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
+				}
+				else if (can_unfav){
+					GFX_blitButton(screen, HINT_FAV, "UNFAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter-10), Screen.buttons.top, Screen.button.text.ox_X);
+				}
 			}
+			
 			
 			if (show_version) {
 				GFX_blitButton(screen, "B", "BACK", -Screen.buttons.right, Screen.buttons.top, Screen.button.text.ox_B);

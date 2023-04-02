@@ -13,6 +13,7 @@
 
 #define HINT_SLEEP "POWER"
 #define HINT_RESUME "X"
+#define HINT_FAV "Y"
 
 #define SDLK_UNDEFINED -1
 
@@ -82,6 +83,8 @@ typedef struct UnionPaths {
 	char paksDir[256];
 	char recentPath[256];
 	char fauxRecentDir[256];
+	char favPath[256];
+	char fauxFavDir[256];
 	char collectionsDir[256];
 } UnionPaths;
 
