@@ -1385,12 +1385,23 @@ static void loadLast(void) { // call after loading root directory
 				if (tmp) tmp[1] = '\0'; // 1 because we want to keep the opening parenthesis to avoid collating "Game Boy Color" and "Game Boy Advance" into "Game Boy"
 			}
 			
+			if (prefixMatch(Paths.fauxFavDir, full_path)){
+				
+				for (int i=0; i<favorites->count; i++) {
+					Favorite* item = favorites->items[i];
+					if (suffixMatch(filename, item->path)){
+						top->selected = i;
+						break;
+					}
+				}
+			}
+			
 			for (int i=0; i<top->entries->count; i++) {
 				Entry* entry = top->entries->items[i];
 			
 				// NOTE: strlen() is required for collated_path, '\0' wasn't reading as NULL for some reason
 				if (exactMatch(entry->path, path) || (strlen(collated_path) && prefixMatch(collated_path, entry->path)) || (prefixMatch(Paths.collectionsDir, full_path) && suffixMatch(filename, entry->path))) {
-					top->selected = i;
+					top->selected = i;						
 					if (i>=top->end) {
 						top->start = i;
 						top->end = top->start + Screen.main.list.row_count;
