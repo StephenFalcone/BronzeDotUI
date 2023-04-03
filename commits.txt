@@ -4,12 +4,12 @@ ab7f0294  picoarch
 76e45c34  libpicofe
 88252880  libretro-common
 15e0485e  vvvvvv
-18be3181  beetle-pce-fast
+e61d5595  beetle-pce-fast
 dd6393f7  beetle-vb
 e9fe530d  fake-08
 8a49aa54  fceumm
 463e29c1  gambatte
-a9448d8e  genesis-plus-gx
+3c7a0c44  genesis-plus-gx
 541adc9e  gpsp
 75c658cc  mednafen_supafaust
 a69c3434  mgba
