@@ -4,6 +4,8 @@ Fork of DotUI with color change back to original MiniUI bronze color.
 
 <img src="github/release.png" width=320 /> <img src="github/main.png" width=320 /> <img src="github/menu.png" width=320 />
 
-Also including SUPA and MGBA emus.
+Additions:
+Include SUPA and MGBA emulators by default
+Favorites feature - save up to 5 favorite roms
 
-To install or update follow readme. To update from DotUI, delete .tmp_update directory and place miyoo354 directory in root of SD card
+To install or update follow included README
