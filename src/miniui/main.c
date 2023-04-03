@@ -1794,20 +1794,20 @@ int main (int argc, char *argv[]) {
 				else GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
 				
 				xbutton_width = GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
-				if(can_fav){
+				if(can_fav && !show_version){
 					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
 				}
-				else if (can_unfav){
+				else if (can_unfav && !show_version){
 					GFX_blitButton(screen, HINT_FAV, "UNFAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
 				}
 			}
 			else {
 				GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
 				xbutton_width = GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
-				if(can_fav){
+				if(can_fav && !show_version){
 					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
 				}
-				else if (can_unfav){
+				else if (can_unfav && !show_version){
 					GFX_blitButton(screen, HINT_FAV, "UNFAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter-10), Screen.buttons.top, Screen.button.text.ox_X);
 				}
 			}
