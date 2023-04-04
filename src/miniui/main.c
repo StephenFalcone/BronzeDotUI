@@ -445,6 +445,21 @@ static void addRecent(char* path) {
 	saveRecents();
 }
 
+static int favHasM3u(char* rom_path, char* m3u_path) {
+	char* tmp;
+
+	strcpy(m3u_path, rom_path);
+	char dir_name[256];
+	tmp = strrchr(m3u_path, '/');
+	strcpy(dir_name, tmp);
+
+	char buffer[256];
+	sprintf(buffer, "%s%s%s", m3u_path, dir_name, ".m3u");
+	strcpy(m3u_path, buffer);
+
+	return exists(m3u_path);
+}
+
 #define kMaxFavorites 5 // a multiple of all menu rows
 static void saveFavorites(void) {
 	FILE* file = fopen(Paths.favPath, "w");
@@ -459,13 +474,28 @@ static void saveFavorites(void) {
 }
 
 static void editFavorite(char* path) {
-	path += strlen(Paths.rootDir); // makes paths platform agnostic
-	int id = FavoriteArray_indexOf(favorites, path);
+	char sd_path[256];
+	strcpy(sd_path, path);
+	
+	char m3u_path[256];
+	int has_m3u = favHasM3u(sd_path, m3u_path);
+	
+	char str[12];
+	sprintf(str, "%d", has_m3u);
+	
+	char favorite_path[256];
+	strcpy(favorite_path, has_m3u ? m3u_path : sd_path);
+	
+	if (prefixMatch(Paths.rootDir, favorite_path)){
+		memmove(favorite_path, favorite_path+11, strlen(favorite_path) - 10);
+	}
+		
+	int id = FavoriteArray_indexOf(favorites, favorite_path);
 	if (id==-1) { // add
 		while (favorites->count>=kMaxFavorites) {
 			Favorite_free(Array_pop(favorites));
 		}
-		Array_unshift(favorites, Favorite_new(path));
+		Array_unshift(favorites, Favorite_new(favorite_path));
 	}
 	else if (id>=0) { // bump to bottom and pop
 		for (int i=id; i<favorites->count-1; i++) {
