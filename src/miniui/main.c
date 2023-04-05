@@ -491,11 +491,8 @@ static void editFavorite(char* path) {
 	}
 		
 	int id = FavoriteArray_indexOf(favorites, favorite_path);
-	if (id==-1) { // add
-		while (favorites->count>=kMaxFavorites) {
-			Favorite_free(Array_pop(favorites));
-		}
-		Array_unshift(favorites, Favorite_new(favorite_path));
+	if (id==-1 && favorites->count<kMaxFavorites) { // add
+		Array_push(favorites, Favorite_new(favorite_path));
 	}
 	else if (id>=0) { // bump to bottom and pop
 		for (int i=id; i<favorites->count-1; i++) {
@@ -1824,7 +1821,7 @@ int main (int argc, char *argv[]) {
 				else GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
 				
 				xbutton_width = GFX_blitButton(screen, HINT_RESUME, "RESUME", Screen.buttons.left, Screen.buttons.top, Screen.button.text.ox_X);
-				if(can_fav && !show_version){
+				if(can_fav && !show_version && favorites->count<kMaxFavorites){
 					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
 				}
 				else if (can_unfav && !show_version){
@@ -1834,7 +1831,7 @@ int main (int argc, char *argv[]) {
 			else {
 				GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
 				xbutton_width = GFX_blitPill(screen, HINT_SLEEP, "SLEEP", Screen.buttons.left, Screen.buttons.top);
-				if(can_fav && !show_version){
+				if(can_fav && !show_version && favorites->count<kMaxFavorites){
 					GFX_blitButton(screen, HINT_FAV, "FAV", (Screen.buttons.left+xbutton_width+Screen.buttons.gutter), Screen.buttons.top, Screen.button.text.ox_X);
 				}
 				else if (can_unfav && !show_version){
